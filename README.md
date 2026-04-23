@@ -114,3 +114,12 @@ student_health_model/
 │   ├── feature_importance_rf.png
 │   ├── model_accuracy_comparison.png
 │   └── stress_vs_burnout.png
+
+How to Run
+Create and activate a virtual environment
+Install required libraries:
+pip install pandas numpy matplotlib seaborn scikit-learn
+Place the dataset file as:
+student_burnout.csv
+Run:
+python main.py
