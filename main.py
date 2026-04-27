@@ -1,4 +1,5 @@
 import os
+import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -12,7 +13,27 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
-df = pd.read_csv("student_burnout.csv")
+parser = argparse.ArgumentParser(description="Student burnout model training and visualization")
+parser.add_argument("--data", default="student_burnout.csv", help="Path to dataset CSV file")
+parser.add_argument("--target", default="burnout_level", help="Target column name")
+parser.add_argument("--id-column", default="student_id", help="ID column to drop if present")
+parser.add_argument(
+    "--class-order",
+    default="Low,Medium,High",
+    help="Comma-separated class order for confusion matrix, for example: Low,Medium,High"
+)
+args = parser.parse_args()
+
+df = pd.read_csv(args.data)
+
+if args.target not in df.columns:
+    raise ValueError(
+        f"Target column '{args.target}' not found in dataset. Available columns: {list(df.columns)}"
+    )
+
+class_labels = [label.strip() for label in args.class_order.split(",") if label.strip()]
+if not class_labels:
+    class_labels = sorted(df[args.target].dropna().unique().tolist())
 
 print("Dataset loaded successfully")
 print("Shape:", df.shape)
@@ -25,31 +46,37 @@ sns.set_style("whitegrid")
 # -----------------------------
 
 plt.figure(figsize=(8, 5))
-sns.countplot(x="burnout_level", hue="burnout_level", data=df, palette="Set2", legend=False)
-plt.title("Burnout Level Distribution")
-plt.xlabel("Burnout Level")
+sns.countplot(x=args.target, hue=args.target, data=df, palette="Set2", legend=False)
+plt.title(f"{args.target} Distribution")
+plt.xlabel(args.target)
 plt.ylabel("Count")
 plt.tight_layout()
 plt.savefig("outputs/burnout_distribution.png")
 plt.close()
 
-plt.figure(figsize=(8, 5))
-sns.countplot(x="stress_level", hue="burnout_level", data=df, palette="Set1")
-plt.title("Stress Level vs Burnout Level")
-plt.xlabel("Stress Level")
-plt.ylabel("Count")
-plt.tight_layout()
-plt.savefig("outputs/stress_vs_burnout.png")
-plt.close()
+if "stress_level" in df.columns:
+    plt.figure(figsize=(8, 5))
+    sns.countplot(x="stress_level", hue=args.target, data=df, palette="Set1")
+    plt.title(f"Stress Level vs {args.target}")
+    plt.xlabel("Stress Level")
+    plt.ylabel("Count")
+    plt.tight_layout()
+    plt.savefig("outputs/stress_vs_burnout.png")
+    plt.close()
+else:
+    print("Skipped stress vs target plot: 'stress_level' column not found")
 
-plt.figure(figsize=(8, 5))
-sns.boxplot(x="burnout_level", y="anxiety_score", hue="burnout_level", data=df, palette="Pastel1", legend=False)
-plt.title("Anxiety Score by Burnout Level")
-plt.xlabel("Burnout Level")
-plt.ylabel("Anxiety Score")
-plt.tight_layout()
-plt.savefig("outputs/anxiety_vs_burnout.png")
-plt.close()
+if "anxiety_score" in df.columns:
+    plt.figure(figsize=(8, 5))
+    sns.boxplot(x=args.target, y="anxiety_score", hue=args.target, data=df, palette="Pastel1", legend=False)
+    plt.title(f"Anxiety Score by {args.target}")
+    plt.xlabel(args.target)
+    plt.ylabel("Anxiety Score")
+    plt.tight_layout()
+    plt.savefig("outputs/anxiety_vs_burnout.png")
+    plt.close()
+else:
+    print("Skipped anxiety vs target plot: 'anxiety_score' column not found")
 
 print("Graphs saved successfully in the outputs folder")
 
@@ -57,8 +84,12 @@ print("Graphs saved successfully in the outputs folder")
 # STEP B: Data Preparation
 # -----------------------------
 
-X = df.drop(columns=["burnout_level", "student_id"])
-y = df["burnout_level"]
+drop_columns = [args.target]
+if args.id_column in df.columns:
+    drop_columns.append(args.id_column)
+
+X = df.drop(columns=drop_columns)
+y = df[args.target]
 
 categorical_cols = X.select_dtypes(include=["object"]).columns.tolist()
 numerical_cols = X.select_dtypes(exclude=["object"]).columns.tolist()
@@ -120,7 +151,11 @@ print(classification_report(y_test, rf_pred))
 # STEP E: Confusion Matrix
 # -----------------------------
 
-cm = confusion_matrix(y_test, rf_pred, labels=["Low", "Medium", "High"])
+missing_in_test = [label for label in class_labels if label not in set(y_test)]
+if missing_in_test:
+    print(f"Warning: some class labels are not present in y_test: {missing_in_test}")
+
+cm = confusion_matrix(y_test, rf_pred, labels=class_labels)
 
 plt.figure(figsize=(7, 5))
 sns.heatmap(
@@ -128,8 +163,8 @@ sns.heatmap(
     annot=True,
     fmt="d",
     cmap="Blues",
-    xticklabels=["Low", "Medium", "High"],
-    yticklabels=["Low", "Medium", "High"]
+    xticklabels=class_labels,
+    yticklabels=class_labels
 )
 plt.title("Random Forest Confusion Matrix")
 plt.xlabel("Predicted Label")
